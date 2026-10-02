@@ -122,6 +122,7 @@ const fullscreenController = createFullscreenController(document)
 const fullscreen = ref(fullscreenController.isActive())
 const fullscreenPending = ref(false)
 const notice = ref(false)
+let noticeTimeout: ReturnType<typeof setTimeout> | undefined
 const duration = ref(25 * 60 * 1000)
 const remaining = ref(duration.value)
 const running = ref(false)
@@ -344,12 +345,16 @@ function saveCustom() {
 }
 async function toggleFullscreen() {
   if (fullscreenPending.value) return
+  clearTimeout(noticeTimeout)
   notice.value = false
   fullscreenPending.value = true
   try {
     await fullscreenController.toggle()
   } catch {
     notice.value = true
+    noticeTimeout = setTimeout(() => {
+      notice.value = false
+    }, 3000)
   } finally {
     syncFullscreen()
     fullscreenPending.value = false
@@ -428,6 +433,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   clearInterval(interval)
+  clearTimeout(noticeTimeout)
   media?.removeEventListener('change', syncSystem)
   document.removeEventListener('fullscreenchange', syncFullscreen)
   document.removeEventListener('webkitfullscreenchange', syncFullscreen)
@@ -570,9 +576,12 @@ onUnmounted(() => {
         :aria-label="`${t.selectTimezone}: ${timezoneLabel} ${utcOffset}`"
         :title="t.selectTimezone"
       >
-        <span class="timezone-icon" aria-hidden="true">◷</span><span>{{ timezoneLabel }}</span
-        ><span class="offset">{{ utcOffset }}</span
-        ><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>
+        <span class="timezone-icon" aria-hidden="true">◷</span>
+        <span class="timezone-details">
+          <span class="timezone-name">{{ timezoneLabel }}</span>
+          <span class="offset">{{ utcOffset }}</span>
+        </span>
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>
       </button>
       <div class="footer-right">
         <button
@@ -834,6 +843,8 @@ input:focus-visible {
   gap: 3px;
 }
 .tabs button {
+  flex-shrink: 0;
+  white-space: nowrap;
   background: transparent;
   border: 0;
   border-radius: 7px;
@@ -1071,6 +1082,11 @@ svg {
   align-items: center;
   gap: 10px;
 }
+.timezone-details {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .timezone {
   padding-left: 0;
   font-size: 12px;
@@ -1253,6 +1269,7 @@ svg {
     font-size: 17px;
   }
   .tabs {
+    width: max-content;
     position: absolute;
     top: 98px;
     left: 50%;
@@ -1291,11 +1308,36 @@ svg {
     width: 160px;
   }
   .presets {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    width: 100%;
+    max-width: 360px;
     gap: 6px;
   }
   .presets button {
-    padding: 8px 10px;
+    padding: 8px 4px;
     font-size: 11px;
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .presets svg {
+    display: none;
+  }
+  .timer-actions {
+    width: min(100%, 300px);
+    margin-inline: auto;
+    gap: 16px;
+  }
+  .timer-actions .primary-button {
+    flex: 1;
+    min-width: 0;
+    padding-inline: 16px;
+    white-space: nowrap;
+  }
+  .timer-actions .quiet-button {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
   }
   .timer-status {
     min-height: 20px;
@@ -1306,23 +1348,50 @@ svg {
     min-height: 90px;
     height: auto;
     font-size: 10px;
+    gap: 8px;
   }
   .timezone {
-    flex-wrap: wrap;
-    gap: 6px;
-    max-width: 60%;
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+  .timezone-details {
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    gap: 3px;
+  }
+  .timezone-name {
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .timezone-icon,
+  .timezone svg {
+    flex-shrink: 0;
   }
   .offset {
-    margin-left: 2px;
+    margin-left: 0;
+    white-space: nowrap;
   }
   .theme-button,
   .language-button {
     font-size: 11px;
     gap: 6px;
-    padding-right: 0;
+    min-height: 44px;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+  .theme-button {
+    width: 44px;
+    padding: 0;
   }
   .footer-right {
-    gap: 5px;
+    gap: 2px;
+    flex-shrink: 0;
   }
   .theme-button span {
     display: none;
@@ -1331,9 +1400,6 @@ svg {
 @media (max-width: 380px) {
   .page {
     padding: 0 16px;
-  }
-  .presets button {
-    padding: 8px;
   }
   .timezone {
     padding-left: 0;
