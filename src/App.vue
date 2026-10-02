@@ -884,6 +884,9 @@ input:focus-visible {
   color: var(--ink);
   background: var(--surface);
 }
+.footer .quiet-button:hover {
+  background: transparent;
+}
 svg {
   height: 19px;
   width: 19px;
