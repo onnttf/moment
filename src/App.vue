@@ -41,6 +41,7 @@ const messages = {
     home: '此刻首页',
     currentTime: '当前时间',
     selectTimezone: '选择时区',
+    selectSources: '选择来源',
     localTimezone: '本地',
     searchTimezone: '搜索城市或时区…',
     noTimezones: '没有匹配的时区，试试城市英文名或 IANA 时区名称。',
@@ -62,6 +63,7 @@ const messages = {
     home: 'Moment home',
     currentTime: 'Current time',
     selectTimezone: 'Choose a time zone',
+    selectSources: 'Choose sources',
     localTimezone: 'Local',
     searchTimezone: 'Search cities or time zones…',
     noTimezones: 'No matching zones. Try an English city name or an IANA time zone.',
@@ -84,6 +86,7 @@ const locale = computed(() => (language.value === 'zh' ? 'zh-CN' : 'en-US'))
 const now = ref(Date.now())
 // The feed is optional. If it ever throws while rendering, drop it and keep the clock running.
 const feedBroken = ref(false)
+const feed = ref<InstanceType<typeof FeedView>>()
 onErrorCaptured(() => {
   feedBroken.value = true
   return false
@@ -296,6 +299,17 @@ onUnmounted(() => {
           <span class="offset">{{ utcOffset }}</span>
         </button>
         <button
+          v-if="!fullscreen && !feedBroken"
+          class="quiet-button icon-button"
+          @click="feed?.openSources()"
+          :aria-label="t.selectSources"
+          :title="t.selectSources"
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h10" />
+          </svg>
+        </button>
+        <button
           class="quiet-button icon-button"
           @click="toggleLanguage"
           :aria-label="t.language"
@@ -361,7 +375,13 @@ onUnmounted(() => {
         </div>
         <p v-if="notice" class="notice" role="status">{{ t.fullscreenError }}</p>
       </div>
-      <FeedView v-if="!feedBroken" v-show="!fullscreen" :language="language" :timezone="timezone" />
+      <FeedView
+        v-if="!feedBroken"
+        v-show="!fullscreen"
+        ref="feed"
+        :language="language"
+        :timezone="timezone"
+      />
     </main>
 
     <dialog

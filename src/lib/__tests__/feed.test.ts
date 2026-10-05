@@ -1,6 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadSource, parseNewsList } from '../feed.ts'
+import {
+  loadConfig,
+  loadSource,
+  parseConfig,
+  parseNewsList,
+  parseSavedIds,
+  parseSavedSources,
+  pickRandom,
+} from '../feed.ts'
 
 const signal = new AbortController().signal
 const body = (items: unknown) => ({
@@ -89,7 +97,7 @@ test('rejects bodies that are not a news list', () => {
 
 test('loadSource requests one source and rejects on HTTP or format errors', async () => {
   let requested = ''
-  const ok = await loadSource('/api/rss/v1/news/list', 'hacker-news', 3, signal, async (url) => {
+  const ok = await loadSource('/api/rss/v1', 'hacker-news', 3, signal, async (url) => {
     requested = String(url)
     return Response.json(body([{ title: 'Story', url: 'https://example.com/s' }]))
   })
@@ -109,4 +117,77 @@ test('loadSource requests one source and rejects on HTTP or format errors', asyn
       throw new TypeError('Failed to fetch')
     }),
   )
+})
+
+test('parseConfig keeps usable sources and fills a missing name', () => {
+  const config = (sources: unknown) => ({ code: 0, data: { sources } })
+  assert.deepEqual(
+    parseConfig(
+      config([
+        { source_id: 'sspai', name: 'SSPAI', name_zh: '少数派' },
+        { source_id: 'verge', name: ' The Verge ' },
+        { source_id: 'zh-only', name_zh: '只有中文' },
+        { source_id: 'sspai', name: 'Duplicate', name_zh: '重复' },
+        { source_id: 'nameless' },
+        { source_id: '', name: 'No id' },
+        { name: 'No id' },
+        null,
+        'text',
+      ]),
+    ),
+    [
+      { id: 'sspai', name: 'SSPAI', nameZh: '少数派' },
+      { id: 'verge', name: 'The Verge', nameZh: 'The Verge' },
+      { id: 'zh-only', name: '只有中文', nameZh: '只有中文' },
+    ],
+  )
+  assert.deepEqual(parseConfig(config([])), [])
+  for (const bad of [null, '<html>', {}, { code: 1, data: null }, { data: { sources: {} } }]) {
+    assert.throws(() => parseConfig(bad))
+  }
+})
+
+test('loadConfig requests the config and rejects on errors', async () => {
+  let requested = ''
+  const sources = await loadConfig('/api/rss/v1', signal, async (url) => {
+    requested = String(url)
+    return Response.json({ data: { sources: [{ source_id: 'bbc', name: 'BBC World' }] } })
+  })
+  assert.equal(requested, '/api/rss/v1/config')
+  assert.deepEqual(sources, [{ id: 'bbc', name: 'BBC World', nameZh: 'BBC World' }])
+  await assert.rejects(loadConfig('/x', signal, async () => new Response('down', { status: 500 })))
+  await assert.rejects(loadConfig('/x', signal, async () => new Response('<html>')))
+})
+
+test('saved values are read defensively', () => {
+  const sources = [{ id: 'bbc', name: 'BBC World', nameZh: 'BBC 国际' }]
+  assert.deepEqual(parseSavedSources(JSON.stringify(sources)), sources)
+  assert.deepEqual(parseSavedSources(JSON.stringify([...sources, { id: 'x' }, null, 3])), sources)
+  assert.deepEqual(parseSavedIds('["bbc",3,null,"verge"]'), ['bbc', 'verge'])
+  for (const bad of [null, '', '{', '"text"', '{"a":1}', '42']) {
+    assert.deepEqual(parseSavedSources(bad), [])
+    assert.deepEqual(parseSavedIds(bad), [])
+  }
+})
+
+test('pickRandom returns distinct items and never more than there are', () => {
+  const items = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
+  for (let round = 0; round < 50; round++) {
+    const picked = pickRandom(items, 5)
+    assert.equal(picked.length, 5)
+    assert.equal(new Set(picked).size, 5)
+    assert.ok(picked.every((item) => items.includes(item)))
+  }
+  assert.deepEqual(items, ['a', 'b', 'c', 'd', 'e', 'f', 'g'])
+  assert.deepEqual(
+    pickRandom(items, 3, () => 0),
+    ['a', 'b', 'c'],
+  )
+  assert.deepEqual(
+    pickRandom(items, 2, () => 0.999),
+    ['g', 'a'],
+  )
+  assert.equal(pickRandom(['a', 'b'], 5).length, 2)
+  assert.deepEqual(pickRandom([], 5), [])
+  assert.deepEqual(pickRandom(items, 0), [])
 })
